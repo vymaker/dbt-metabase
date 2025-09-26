@@ -83,15 +83,17 @@ class ModelsMixin(metaclass=ABCMeta):
 
             synced = True
             for model in models:
-                table_key = model.alias_path.upper()
-                table = tables.get(table_key)
+                # Try schema.table format first (most common)
+                schema_table_key = f"{model.schema.upper()}.{model.alias.upper()}"
+                table = tables.get(schema_table_key)
+                table_key = schema_table_key
                 
-                # Fallback to schema.table format if database.schema.table not found
+                # Fallback to database.schema.table format for multi-catalog databases
                 if not table and model.database:
-                    schema_table_key = f"{model.schema.upper()}.{model.alias.upper()}"
-                    table = tables.get(schema_table_key)
+                    database_schema_table_key = model.alias_path.upper()
+                    table = tables.get(database_schema_table_key)
                     if table:
-                        table_key = schema_table_key
+                        table_key = database_schema_table_key
 
                 if not table:
                     _logger.warning(
@@ -176,15 +178,17 @@ class ModelsMixin(metaclass=ABCMeta):
 
         success = True
 
-        table_key = model.alias_path.upper()
-        api_table = ctx.tables.get(table_key)
+        # Try schema.table format first (most common)
+        schema_table_key = f"{model.schema.upper()}.{model.alias.upper()}"
+        api_table = ctx.tables.get(schema_table_key)
+        table_key = schema_table_key
         
-        # Fallback to schema.table format if database.schema.table not found
+        # Fallback to database.schema.table format for multi-catalog databases
         if not api_table and model.database:
-            schema_table_key = f"{model.schema.upper()}.{model.alias.upper()}"
-            api_table = ctx.tables.get(schema_table_key)
+            database_schema_table_key = model.alias_path.upper()
+            api_table = ctx.tables.get(database_schema_table_key)
             if api_table:
-                table_key = schema_table_key
+                table_key = database_schema_table_key
 
         if not api_table:
             _logger.error("Table '%s' does not exist", table_key)
