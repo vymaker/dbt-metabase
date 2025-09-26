@@ -83,20 +83,13 @@ class ModelsMixin(metaclass=ABCMeta):
 
             synced = True
             for model in models:
-                schema_name = model.schema.upper()
-                model_name = model.alias.upper()
-                database_name = model.database.upper() if model.database else ""
-
-                # Try multi-catalog format first (database.schema.table), then fallback to schema.table
-                table_key = (
-                    f"{database_name}.{schema_name}.{model_name}"
-                    if database_name
-                    else f"{schema_name}.{model_name}"
-                )
+                table_key = model.alias_path.upper()
                 table = tables.get(table_key)
 
                 # Fallback to schema.table format if multi-catalog format not found
-                if not table and database_name:
+                if not table and model.database:
+                    schema_name = model.schema.upper()
+                    model_name = model.alias.upper()
                     table_key = f"{schema_name}.{model_name}"
                     table = tables.get(table_key)
 
@@ -183,20 +176,13 @@ class ModelsMixin(metaclass=ABCMeta):
 
         success = True
 
-        schema_name = model.schema.upper()
-        model_name = model.alias.upper()
-        database_name = model.database.upper() if model.database else ""
-
-        # Try multi-catalog format first (database.schema.table), then fallback to schema.table
-        table_key = (
-            f"{database_name}.{schema_name}.{model_name}"
-            if database_name
-            else f"{schema_name}.{model_name}"
-        )
+        table_key = model.alias_path.upper()
         api_table = ctx.tables.get(table_key)
 
         # Fallback to schema.table format if multi-catalog format not found
-        if not api_table and database_name:
+        if not api_table and model.database:
+            schema_name = model.schema.upper()
+            model_name = model.alias.upper()
             table_key = f"{schema_name}.{model_name}"
             api_table = ctx.tables.get(table_key)
 
