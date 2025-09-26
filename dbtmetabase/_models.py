@@ -85,17 +85,17 @@ class ModelsMixin(metaclass=ABCMeta):
             for model in models:
                 table_key = model.alias_path.upper()
                 table = tables.get(table_key)
-
-                # Fallback to schema.table format if multi-catalog format not found
+                
+                # Fallback to schema.table format if database.schema.table not found
                 if not table and model.database:
-                    schema_name = model.schema.upper()
-                    model_name = model.alias.upper()
-                    table_key = f"{schema_name}.{model_name}"
-                    table = tables.get(table_key)
+                    schema_table_key = f"{model.schema.upper()}.{model.alias.upper()}"
+                    table = tables.get(schema_table_key)
+                    if table:
+                        table_key = schema_table_key
 
                 if not table:
                     _logger.warning(
-                        "Table '%s' not in schema '%s'", table_key, schema_name
+                        "Table '%s' not found", table_key
                     )
                     synced = False
                     continue
@@ -178,13 +178,13 @@ class ModelsMixin(metaclass=ABCMeta):
 
         table_key = model.alias_path.upper()
         api_table = ctx.tables.get(table_key)
-
-        # Fallback to schema.table format if multi-catalog format not found
+        
+        # Fallback to schema.table format if database.schema.table not found
         if not api_table and model.database:
-            schema_name = model.schema.upper()
-            model_name = model.alias.upper()
-            table_key = f"{schema_name}.{model_name}"
-            api_table = ctx.tables.get(table_key)
+            schema_table_key = f"{model.schema.upper()}.{model.alias.upper()}"
+            api_table = ctx.tables.get(schema_table_key)
+            if api_table:
+                table_key = schema_table_key
 
         if not api_table:
             _logger.error("Table '%s' does not exist", table_key)
