@@ -31,6 +31,21 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
+[dependency-groups]
+dev = [
+    "build>=1.0.3",
+    "twine>=4.0.2",
+    "ruff>=0.5.5",
+    "pyright>=1.1.405",
+    "pytest>=8.3.1",
+    "molot~=1.0.0",
+    "dbt-core~=1.10.1",
+    "dbt-postgres~=1.9.0",
+    "python-dotenv~=1.0.1",
+    "types-requests",
+    "types-PyYAML",
+]
+
 [project.scripts]
 dbt-metabase = "dbtmetabase.__main__:cli"
 
