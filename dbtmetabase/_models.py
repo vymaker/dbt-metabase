@@ -87,7 +87,7 @@ class ModelsMixin(metaclass=ABCMeta):
                 schema_table_key = f"{model.schema.upper()}.{model.alias.upper()}"
                 table = tables.get(schema_table_key)
                 table_key = schema_table_key
-                
+
                 # Fallback to database.schema.table format for multi-catalog databases
                 if not table and model.database:
                     database_schema_table_key = model.alias_path.upper()
@@ -96,9 +96,7 @@ class ModelsMixin(metaclass=ABCMeta):
                         table_key = database_schema_table_key
 
                 if not table:
-                    _logger.warning(
-                        "Table '%s' not found", table_key
-                    )
+                    _logger.warning("Table '%s' not found", table_key)
                     synced = False
                     continue
 
@@ -178,16 +176,21 @@ class ModelsMixin(metaclass=ABCMeta):
 
         success = True
 
-        # Try schema.table format first (most common)
+        # PostgreSQL-first approach: try schema.table format (standard)
         schema_table_key = f"{model.schema.upper()}.{model.alias.upper()}"
         api_table = ctx.tables.get(schema_table_key)
         table_key = schema_table_key
-        
-        # Fallback to database.schema.table format for multi-catalog databases
+
+        # Databricks fallback: try database.schema.table for multi-catalog
+        # Only activates when PostgreSQL format fails AND model has database
         if not api_table and model.database:
             database_schema_table_key = model.alias_path.upper()
             api_table = ctx.tables.get(database_schema_table_key)
             if api_table:
+                _logger.debug(
+                    "Using multi-catalog format for table: %s",
+                    database_schema_table_key,
+                )
                 table_key = database_schema_table_key
 
         if not api_table:
@@ -350,31 +353,45 @@ class ModelsMixin(metaclass=ABCMeta):
             fk_target_field_label = f"{fk_target_table_name}.{fk_target_field_name}"
 
             if fk_target_table_name and fk_target_field_name:
-                # Try to find the target field with multi-catalog support
+                # PostgreSQL-first: try standard schema.table format
                 fk_target_field = ctx.get_field(
                     table_key=fk_target_table_name,
                     field_key=fk_target_field_name,
                 )
 
-                # If not found and target table doesn't contain catalog, try with current model's catalog
+                # Databricks fallback: try catalog.schema.table format
+                # Only when PostgreSQL fails AND multi-catalog context
                 if (
                     not fk_target_field
                     and "." in table_key
-                    and fk_target_table_name.count(".") == 1
+                    and fk_target_table_name.count(".") < 2
                 ):
                     catalog_part = table_key.split(".")[0]
                     fk_target_table_with_catalog = (
                         f"{catalog_part}.{fk_target_table_name}"
                     )
+                    _logger.debug(
+                        "Trying multi-catalog FK: %s -> %s",
+                        fk_target_table_name,
+                        fk_target_table_with_catalog,
+                    )
                     fk_target_field = ctx.get_field(
                         table_key=fk_target_table_with_catalog,
                         field_key=fk_target_field_name,
+                    )
+
+                if not fk_target_field:
+                    _logger.warning(
+                        "FK resolution failed for %s.%s",
+                        fk_target_table_name,
+                        fk_target_field_name,
                     )
                 if fk_target_field:
                     fk_target_field_id = fk_target_field.get("id")
                     if fk_target_field.get(semantic_type_key) != "type/PK":
                         _logger.info(
-                            "Field '%s' will be updated as primary key for foreign key '%s'",
+                            "Field '%s' will be updated as primary key "
+                            "for foreign key '%s'",
                             fk_target_field_label,
                             column_label,
                         )
@@ -492,7 +509,7 @@ class ModelsMixin(metaclass=ABCMeta):
             # Handle database.schema.table format when database info is available
             # Check if table has database/catalog information
             database_name = None
-            
+
             # For Databricks multi-catalog: table["db"] contains "catalog.schema"
             if table.get("db") and "." in str(table["db"]):
                 db_parts = str(table["db"]).split(".")
@@ -501,7 +518,7 @@ class ModelsMixin(metaclass=ABCMeta):
             # For other databases: use table["db"] directly if it doesn't contain schema
             elif table.get("db") and "." not in str(table["db"]):
                 database_name = str(table["db"]).upper()
-            
+
             # Create table key with database prefix when available
             if database_name:
                 table_key = f"{database_name}.{schema_name}.{table_name}"

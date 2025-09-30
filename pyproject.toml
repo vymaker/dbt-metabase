@@ -43,6 +43,9 @@ packages = ["dbtmetabase"]
 [tool.setuptools_scm]
 version_file = "dbtmetabase/_version.py"
 
+[project.optional-dependencies]
+databricks = ["dbt-databricks~=1.9.0", "databricks-sql-connector>=3.0.0"]
+
 [tool.uv]
 dev-dependencies = [
     "build>=1.0.3",

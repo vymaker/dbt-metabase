@@ -56,7 +56,13 @@ install: build
 
 .PHONY: sandbox-up
 sandbox-up:
-	( cd sandbox && docker compose up --build --attach app )
+	@if [ "$(TARGET)" = "databricks" ]; then \
+		echo "🚀 Starting with Databricks initialization"; \
+		( cd sandbox && env $$(cat .env .env.databricks | grep -v '^#' | xargs) TARGET_COMMAND=init_databricks docker compose up --build --attach app ); \
+	else \
+		echo "🐘 Starting with PostgreSQL-only initialization"; \
+		( cd sandbox && docker compose up --build --attach app ); \
+	fi
 
 .PHONY: sandbox-down
 sandbox-down:
@@ -64,6 +70,10 @@ sandbox-down:
 
 .PHONY: sandbox-models
 sandbox-models:
+	@if [ "$(TARGET)" = "databricks" ]; then \
+		uv sync --extra databricks; \
+		( cd sandbox && env $$(cat .env .env.databricks | grep -v '^#' | xargs) uv run python entrypoint.py databricks_setup ); \
+	fi
 	( . sandbox/.env && uv run python3 -m dbtmetabase models \
 		--manifest-path sandbox/target/manifest.json \
 		--metabase-url http://localhost:$$MB_PORT \
@@ -77,6 +87,10 @@ sandbox-models:
 
 .PHONY: sandbox-exposures
 sandbox-exposures:
+	@if [ "$(TARGET)" = "databricks" ]; then \
+		uv sync --extra databricks; \
+		( cd sandbox && env $$(cat .env .env.databricks | grep -v '^#' | xargs) uv run python entrypoint.py databricks_setup ); \
+	fi
 	rm -rf sandbox/models/exposures
 	mkdir -p sandbox/models/exposures
 	( . sandbox/.env && uv run python3 -m dbtmetabase exposures \
