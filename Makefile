@@ -76,46 +76,67 @@ sandbox-down: ## Stop sandbox environment
 .PHONY: sandbox-models
 sandbox-models: ## Export dbt models to Metabase (use TARGET=databricks for Databricks)
 	@if [ "$(TARGET)" = "databricks" ]; then \
-		uv sync --extra databricks; \
-		( cd sandbox && env $$(cat .env .env.databricks | grep -v '^#' | xargs) uv run python entrypoint.py databricks_setup ); \
+		echo "🚀 Running dbt-metabase models with Databricks"; \
+		( cd sandbox && . .env && . .env.databricks && uv run python3 -m dbtmetabase models \
+			--manifest-path target/manifest.json \
+			--metabase-url http://localhost:$$MB_PORT \
+			--metabase-username $$MB_USER \
+			--metabase-password $$MB_PASSWORD \
+			--metabase-database $$DATABRICKS_MB_DB_NAME \
+			--http-header x-dummy-key dummy-value \
+			--order-fields \
+			--verbose ); \
+	else \
+		( . sandbox/.env && uv run python3 -m dbtmetabase models \
+			--manifest-path sandbox/target/manifest.json \
+			--metabase-url http://localhost:$$MB_PORT \
+			--metabase-username $$MB_USER \
+			--metabase-password $$MB_PASSWORD \
+			--metabase-database $$POSTGRES_DB \
+			--include-schemas "pub*",inventory \
+			--http-header x-dummy-key dummy-value \
+			--order-fields \
+			--verbose ); \
 	fi
-	( . sandbox/.env && uv run python3 -m dbtmetabase models \
-		--manifest-path sandbox/target/manifest.json \
-		--metabase-url http://localhost:$$MB_PORT \
-		--metabase-username $$MB_USER \
-		--metabase-password $$MB_PASSWORD \
-		--metabase-database $$POSTGRES_DB \
-		--include-schemas "pub*",inventory \
-		--http-header x-dummy-key dummy-value \
-		--order-fields \
-		--verbose )
 
 .PHONY: sandbox-exposures
 sandbox-exposures: ## Extract dbt exposures from Metabase (use TARGET=databricks for Databricks)
 	@if [ "$(TARGET)" = "databricks" ]; then \
-		uv sync --extra databricks; \
-		( cd sandbox && env $$(cat .env .env.databricks | grep -v '^#' | xargs) uv run python entrypoint.py databricks_setup ); \
+		echo "🚀 Running dbt-metabase exposures with Databricks"; \
+		rm -rf sandbox/models/exposures; \
+		mkdir -p sandbox/models/exposures; \
+		( cd sandbox && . .env && . .env.databricks && uv run python3 -m dbtmetabase exposures \
+			--manifest-path target/manifest.json \
+			--metabase-url http://localhost:$$MB_PORT \
+			--metabase-username $$MB_USER \
+			--metabase-password $$MB_PASSWORD \
+			--metabase-database $$DATABRICKS_MB_DB_NAME \
+			--output-path models/exposures \
+			--output-grouping collection \
+			--tag metabase \
+			--verbose ); \
+		( cd sandbox && . .env && . .env.databricks && uv run dbt docs generate --profiles-dir . --target databricks ); \
+	else \
+		rm -rf sandbox/models/exposures; \
+		mkdir -p sandbox/models/exposures; \
+		( . sandbox/.env && uv run python3 -m dbtmetabase exposures \
+			--manifest-path sandbox/target/manifest.json \
+			--metabase-url http://localhost:$$MB_PORT \
+			--metabase-username $$MB_USER \
+			--metabase-password $$MB_PASSWORD \
+			--output-path sandbox/models/exposures \
+			--output-grouping collection \
+			--tag metabase \
+			--verbose ); \
+		( . sandbox/.env && cd sandbox && \
+			POSTGRES_HOST=localhost \
+			POSTGRES_PORT=$$POSTGRES_PORT \
+			POSTGRES_USER=$$POSTGRES_USER \
+			POSTGRES_PASSWORD=$$POSTGRES_PASSWORD \
+			POSTGRES_DB=$$POSTGRES_DB \
+			POSTGRES_SCHEMA=$$POSTGRES_SCHEMA \
+			uv run dbt docs generate ); \
 	fi
-	rm -rf sandbox/models/exposures
-	mkdir -p sandbox/models/exposures
-	( . sandbox/.env && uv run python3 -m dbtmetabase exposures \
-		--manifest-path sandbox/target/manifest.json \
-		--metabase-url http://localhost:$$MB_PORT \
-		--metabase-username $$MB_USER \
-		--metabase-password $$MB_PASSWORD \
-		--output-path sandbox/models/exposures \
-		--output-grouping collection \
-		--tag metabase \
-		--verbose )
-	
-	( . sandbox/.env && cd sandbox && \
-		POSTGRES_HOST=localhost \
-		POSTGRES_PORT=$$POSTGRES_PORT \
-		POSTGRES_USER=$$POSTGRES_USER \
-		POSTGRES_PASSWORD=$$POSTGRES_PASSWORD \
-		POSTGRES_DB=$$POSTGRES_DB \
-		POSTGRES_SCHEMA=$$POSTGRES_SCHEMA \
-		uv run dbt docs generate )
 
 .PHONY: sandbox-e2e
 sandbox-e2e: sandbox-up sandbox-models sandbox-exposures sandbox-down ## Run full end-to-end sandbox test

@@ -187,7 +187,9 @@ def metabase_setup():
     ).raise_for_status()
 
 
-@target(description="set up Databricks database in Metabase (if configured)")
+@target(
+    description="set up Databricks: initialize database and configure Metabase connection"
+)
 def databricks_setup():
     if not all(
         [
@@ -196,10 +198,53 @@ def databricks_setup():
             DATABRICKS_TOKEN,
             DATABRICKS_CATALOG,
             DATABRICKS_MB_DB_NAME,
+            DATABRICKS_SCHEMA,
         ]
     ):
         logging.info("Databricks not configured, skipping")
         return
+
+    # Step 1: Initialize Databricks tables first
+    logging.info("=== STEP 1: Initializing Databricks schemas and tables ===")
+    try:
+        from databricks import sql
+    except ImportError:
+        logging.error(
+            "databricks-sql-connector not installed. "
+            "Run: pip install databricks-sql-connector"
+        )
+        return
+
+    # Read the init SQL file
+    init_sql_path = "databricks-initdb/init.sql"
+    if os.path.exists(init_sql_path):
+        with open(init_sql_path, "r", encoding="utf-8") as f:
+            init_sql = f.read()
+
+        # Replace variables in SQL
+        init_sql = init_sql.replace("${DATABRICKS_CATALOG}", DATABRICKS_CATALOG)
+        init_sql = init_sql.replace("${DATABRICKS_SCHEMA}", DATABRICKS_SCHEMA)
+
+        # Execute SQL using Databricks SQL connector
+        logging.info("Creating Databricks schemas and tables...")
+        with sql.connect(
+            server_hostname=DATABRICKS_HOST,
+            http_path=DATABRICKS_HTTP_PATH,
+            access_token=DATABRICKS_TOKEN,
+        ) as connection:
+            with connection.cursor() as cursor:
+                statements = [
+                    stmt.strip() for stmt in init_sql.split(";") if stmt.strip()
+                ]
+                for statement in statements:
+                    logging.info("Executing: %s...", statement[:50])
+                    cursor.execute(statement)
+        logging.info("Databricks initialization completed")
+    else:
+        logging.warning("Init SQL file not found: %s", init_sql_path)
+
+    # Step 2: Set up Metabase connection (now that tables exist)
+    logging.info("=== STEP 2: Setting up Metabase connection ===")
 
     # Use MB_HOST for sandbox
     mb_url = f"http://{MB_HOST}:{MB_PORT}/api"
@@ -232,6 +277,7 @@ def databricks_setup():
             "token": DATABRICKS_TOKEN,
             "catalog": DATABRICKS_CATALOG,
             "use-multiple-catalogs": True,
+            "use-m2m-auth": False,
             "schema-filters-type": "inclusion",
             "schema-filters-patterns": f"{DATABRICKS_CATALOG}.{DATABRICKS_SCHEMA}",
             "advanced-options": False,
@@ -342,59 +388,6 @@ def databricks_setup():
             logging.warning("Failed to get metadata: %s", tables_response.text)
     else:
         logging.warning("Failed to get database info: %s", tables_response.text)
-
-
-@target(description="initialize Databricks with required schemas and tables")
-def databricks_init():
-    if not all(
-        [
-            DATABRICKS_HOST,
-            DATABRICKS_HTTP_PATH,
-            DATABRICKS_TOKEN,
-            DATABRICKS_CATALOG,
-            DATABRICKS_SCHEMA,
-        ]
-    ):
-        logging.info("Databricks not configured, skipping initialization")
-        return
-
-    try:
-        from databricks import sql
-    except ImportError:
-        logging.error(
-            "databricks-sql-connector not installed. "
-            "Run: pip install databricks-sql-connector"
-        )
-        return
-
-    # Read the init SQL file
-    init_sql_path = "databricks-initdb/init.sql"
-    if not os.path.exists(init_sql_path):
-        logging.warning("Init SQL file not found: %s", init_sql_path)
-        return
-
-    with open(init_sql_path, "r", encoding="utf-8") as f:
-        init_sql = f.read()
-
-    # Replace variables in SQL
-    init_sql = init_sql.replace("${DATABRICKS_CATALOG}", DATABRICKS_CATALOG)
-    init_sql = init_sql.replace("${DATABRICKS_SCHEMA}", DATABRICKS_SCHEMA)
-
-    # Execute SQL using Databricks SQL connector
-    logging.info("Initializing Databricks schemas and tables")
-    with sql.connect(
-        server_hostname=DATABRICKS_HOST,
-        http_path=DATABRICKS_HTTP_PATH,
-        access_token=DATABRICKS_TOKEN,
-    ) as connection:
-        with connection.cursor() as cursor:
-            # Split SQL by semicolons and execute each statement
-            statements = [stmt.strip() for stmt in init_sql.split(";") if stmt.strip()]
-            for statement in statements:
-                logging.info("Executing: %s...", statement[:50])
-                cursor.execute(statement)
-
-    logging.info("Databricks initialization completed")
 
 
 evaluate()
