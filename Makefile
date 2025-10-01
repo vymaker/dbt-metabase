@@ -110,12 +110,17 @@ sandbox-exposures: ## Extract dbt exposures from Metabase (use TARGET=databricks
 			--metabase-url http://localhost:$$MB_PORT \
 			--metabase-username $$MB_USER \
 			--metabase-password $$MB_PASSWORD \
-			--metabase-database $$DATABRICKS_MB_DB_NAME \
 			--output-path models/exposures \
 			--output-grouping collection \
 			--tag metabase \
 			--verbose ); \
-		( cd sandbox && . .env && . .env.databricks && uv run dbt docs generate --profiles-dir . --target databricks ); \
+		( cd sandbox && . .env && . .env.databricks && \
+			DATABRICKS_HOST=$$DATABRICKS_HOST \
+			DATABRICKS_HTTP_PATH=$$DATABRICKS_HTTP_PATH \
+			DATABRICKS_TOKEN=$$DATABRICKS_TOKEN \
+			DATABRICKS_CATALOG=$$DATABRICKS_CATALOG \
+			DATABRICKS_SCHEMA=$$DATABRICKS_SCHEMA \
+			uv run dbt docs generate --profiles-dir . --target databricks ); \
 	else \
 		rm -rf sandbox/models/exposures; \
 		mkdir -p sandbox/models/exposures; \
